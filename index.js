@@ -7,12 +7,13 @@ app.use(cors());
 app.use(express.json());
 
 // 🔌 CONEXÃO COM POSTGRESQL
+const { Pool } = require("pg");
+
 const pool = new Pool({
-  user: "postgres",
-  host: "localhost",
-  database: "app_preco",
-  password: "root",
-  port: 5432,
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false
+  }
 });
 
 // 📦 BUSCAR PRODUTO POR CÓDIGO
