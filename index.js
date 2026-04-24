@@ -17,7 +17,7 @@ const pool = new Pool({
 });
 
 /* =========================
-   📦 PRODUTO (SEM FILTRO)
+   📦 PRODUTO (DADOS GLOBAIS + ESTOQUE GERAL)
 ========================= */
 app.get("/produto/:codigo", async (req, res) => {
   const { codigo } = req.params;
@@ -30,39 +30,36 @@ app.get("/produto/:codigo", async (req, res) => {
         p.nome,
         p.preco AS preco_venda,
 
+        /* 📦 TOTAL GERAL */
         COALESCE(c.total_comprado, 0) AS total_comprado,
         COALESCE(v.total_vendido, 0) AS total_vendido,
 
-        /* 🧾 ÚLTIMA COMPRA (DATA + FORNECEDOR + PREÇO) */
+        /* 📦 ESTOQUE TOTAL */
+        COALESCE(c.total_comprado, 0)
+        - COALESCE(v.total_vendido, 0) AS estoque_atual,
+
+        /* 🧾 ÚLTIMA COMPRA GLOBAL (NÃO DEPENDE DE FILTRO) */
         c_last.preco_compra,
         c_last.nome_fornecedor,
-
-        COALESCE(
-          c_last.data_compra,
-          'SEM COMPRA'
-        ) AS ultima_compra,
-
-        /* 📦 ESTOQUE */
-        COALESCE(c.total_comprado, 0)
-        - COALESCE(v.total_vendido, 0) AS estoque_atual
+        c_last.data_compra AS ultima_compra
 
       FROM produtos p
 
-      /* 📦 TOTAL COMPRADO */
+      /* 📦 TOTAL COMPRADO (GLOBAL) */
       LEFT JOIN (
         SELECT produto_id, SUM(qtd_compra) AS total_comprado
         FROM compras
         GROUP BY produto_id
       ) c ON c.produto_id = p.id
 
-      /* 📦 TOTAL VENDIDO */
+      /* 📦 TOTAL VENDIDO (GLOBAL) */
       LEFT JOIN (
         SELECT produto_id, SUM(quantidade) AS total_vendido
         FROM vendas
         GROUP BY produto_id
       ) v ON v.produto_id = p.id
 
-      /* 🔥 ÚLTIMA COMPRA CORRETA (SEM DUPLICAÇÃO) */
+      /* 🧾 ÚLTIMA COMPRA GLOBAL */
       LEFT JOIN LATERAL (
         SELECT 
           TO_CHAR(data_compra::date, 'DD/MM/YYYY') AS data_compra,
@@ -91,7 +88,7 @@ app.get("/produto/:codigo", async (req, res) => {
 
 
 /* =========================
-   📅 PRODUTO COM FILTRO DE PERÍODO
+   📅 PRODUTO POR PERÍODO (SÓ MOVIMENTAÇÃO)
 ========================= */
 app.get("/produto/:codigo/periodo", async (req, res) => {
   const { codigo } = req.params;
@@ -104,14 +101,17 @@ app.get("/produto/:codigo/periodo", async (req, res) => {
         p.codigo,
         p.nome,
 
+        /* 📦 MOVIMENTO NO PERÍODO */
         COALESCE(c.total_comprado, 0) AS total_comprado,
         COALESCE(v.total_vendido, 0) AS total_vendido,
 
+        /* 📦 ESTOQUE NO PERÍODO */
         COALESCE(c.total_comprado, 0)
         - COALESCE(v.total_vendido, 0) AS estoque_periodo
 
       FROM produtos p
 
+      /* 📦 COMPRAS NO PERÍODO */
       LEFT JOIN (
         SELECT produto_id, SUM(qtd_compra) AS total_comprado
         FROM compras
@@ -119,6 +119,7 @@ app.get("/produto/:codigo/periodo", async (req, res) => {
         GROUP BY produto_id
       ) c ON c.produto_id = p.id
 
+      /* 📦 VENDAS NO PERÍODO */
       LEFT JOIN (
         SELECT produto_id, SUM(quantidade) AS total_vendido
         FROM vendas
