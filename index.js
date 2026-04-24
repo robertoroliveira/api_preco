@@ -6,7 +6,9 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// 🔌 CONEXÃO COM POSTGRESQL (Railway)
+/* =========================
+   🔌 CONEXÃO RAILWAY POSTGRES
+========================= */
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: {
@@ -14,7 +16,9 @@ const pool = new Pool({
   }
 });
 
-// 📦 BUSCAR PRODUTO POR CÓDIGO
+/* =========================
+   📦 PRODUTO (SEM FILTRO)
+========================= */
 app.get("/produto/:codigo", async (req, res) => {
   const { codigo } = req.params;
 
@@ -26,29 +30,27 @@ app.get("/produto/:codigo", async (req, res) => {
         p.nome,
         p.preco AS preco_venda,
 
-        c.preco_compra,
-        TO_CHAR(c.data_compra::date, 'DD/MM/YYYY') AS data_compra,
+        COALESCE(SUM(c.qtd_compra), 0) AS total_comprado,
+        COALESCE(SUM(v.quantidade), 0) AS total_vendido,
 
-        COALESCE(c.total_comprado, 0) AS total_comprado,
-        COALESCE(v.total_vendido, 0) AS total_vendido,
+        COALESCE(
+          TO_CHAR(MAX(c.data_compra::date), 'DD/MM/YYYY'),
+          'SEM COMPRA'
+        ) AS ultima_compra,
 
-        COALESCE(c.total_comprado, 0) - COALESCE(v.total_vendido, 0) AS estoque_atual
+        COALESCE(SUM(c.qtd_compra), 0)
+        - COALESCE(SUM(v.quantidade), 0) AS estoque_atual
 
       FROM produtos p
 
-      LEFT JOIN (
-        SELECT produto_id, preco_compra, data_compra, SUM(qtd_compra) AS total_comprado
-        FROM compras
-        GROUP BY produto_id, preco_compra, data_compra
-      ) c ON c.produto_id = p.id
+      LEFT JOIN compras c 
+        ON c.produto_id = p.id
 
-      LEFT JOIN (
-        SELECT produto_id, SUM(quantidade) AS total_vendido
-        FROM vendas
-        GROUP BY produto_id
-      ) v ON v.produto_id = p.id
+      LEFT JOIN vendas v 
+        ON v.produto_id = p.id
 
       WHERE p.codigo = $1
+      GROUP BY p.id, p.codigo, p.nome, p.preco
     `, [codigo]);
 
     if (result.rows.length === 0) {
@@ -58,12 +60,62 @@ app.get("/produto/:codigo", async (req, res) => {
     res.json(result.rows[0]);
 
   } catch (err) {
-    console.error("Erro na API:", err);
+    console.error("Erro API produto:", err);
     res.status(500).json({ error: "Erro no servidor" });
   }
 });
 
-// 🚀 START SERVER
+
+/* =========================
+   📅 PRODUTO COM FILTRO DATA
+========================= */
+app.get("/produto/:codigo/periodo", async (req, res) => {
+  const { codigo } = req.params;
+  const { inicio, fim } = req.query;
+
+  try {
+    const result = await pool.query(`
+      SELECT 
+        p.id,
+        p.codigo,
+        p.nome,
+
+        COALESCE(SUM(c.qtd_compra), 0) AS total_comprado,
+        COALESCE(SUM(v.quantidade), 0) AS total_vendido,
+
+        COALESCE(SUM(c.qtd_compra), 0)
+        - COALESCE(SUM(v.quantidade), 0) AS estoque_periodo
+
+      FROM produtos p
+
+      LEFT JOIN compras c 
+        ON c.produto_id = p.id
+        AND c.data_compra::date BETWEEN $2 AND $3
+
+      LEFT JOIN vendas v 
+        ON v.produto_id = p.id
+        AND v.data_venda::date BETWEEN $2 AND $3
+
+      WHERE p.codigo = $1
+      GROUP BY p.id, p.codigo, p.nome
+    `, [codigo, inicio, fim]);
+
+    if (result.rows.length === 0) {
+      return res.json({ error: "Produto não encontrado" });
+    }
+
+    res.json(result.rows[0]);
+
+  } catch (err) {
+    console.error("Erro API período:", err);
+    res.status(500).json({ error: "Erro no servidor" });
+  }
+});
+
+
+/* =========================
+   🚀 START SERVER
+========================= */
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, "0.0.0.0", () => {
