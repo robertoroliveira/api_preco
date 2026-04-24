@@ -20,7 +20,7 @@ app.get("/produto/:codigo", async (req, res) => {
 
   try {
     const result = await pool.query(
-      "SELECT * FROM produtos WHERE codigo = $1",
+      "SELECT * FROM produtos p join vendas v on v.produto_id = p.id WHERE codigo = $1",
       [codigo]
     );
 
