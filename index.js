@@ -28,42 +28,11 @@ app.get("/produto/:codigo", async (req, res) => {
         COALESCE(c.total_comprado, 0) AS total_comprado,
         COALESCE(v.total_vendido, 0) AS total_vendido,
 
-        COALESCE(c.total_comprado, 0)
-        - COALESCE(v.total_vendido, 0) AS estoque_atual,
+        (COALESCE(c.total_comprado, 0) - COALESCE(v.total_vendido, 0)) AS estoque_atual,
 
-        /* 🧾 ÚLTIMA COMPRA REAL (NÃO DEPENDE DE FILTRO) */
-        COALESCE(
-          (
-            SELECT TO_CHAR(c2.data_compra::date, 'DD/MM/YYYY')
-            FROM compras c2
-            WHERE c2.produto_id = p.id
-            ORDER BY c2.data_compra DESC
-            LIMIT 1
-          ),
-          'SEM COMPRA'
-        ) AS ultima_compra,
-
-        COALESCE(
-          (
-            SELECT c2.nome_fornecedor
-            FROM compras c2
-            WHERE c2.produto_id = p.id
-            ORDER BY c2.data_compra DESC
-            LIMIT 1
-          ),
-          'SEM FORNECEDOR'
-        ) AS nome_fornecedor,
-
-        COALESCE(
-          (
-            SELECT c2.preco_compra
-            FROM compras c2
-            WHERE c2.produto_id = p.id
-            ORDER BY c2.data_compra DESC
-            LIMIT 1
-          ),
-          0
-        ) AS preco_compra
+        ult.nome_fornecedor,
+        ult.preco_compra,
+        ult.data_compra AS ultima_compra
 
       FROM produtos p
 
@@ -79,6 +48,17 @@ app.get("/produto/:codigo", async (req, res) => {
         GROUP BY produto_id
       ) v ON v.produto_id = p.id
 
+      LEFT JOIN LATERAL (
+        SELECT 
+          nome_fornecedor,
+          preco_compra,
+          TO_CHAR(data_compra::date, 'DD/MM/YYYY') AS data_compra
+        FROM compras c2
+        WHERE c2.produto_id = p.id
+        ORDER BY c2.data_compra DESC
+        LIMIT 1
+      ) ult ON true
+
       WHERE p.codigo = $1
     `, [codigo]);
 
@@ -92,7 +72,7 @@ app.get("/produto/:codigo", async (req, res) => {
 
 
 /* =========================
-   📅 PRODUTO POR PERÍODO (APENAS MOVIMENTO)
+   📅 PRODUTO (PERÍODO)
 ========================= */
 app.get("/produto/:codigo/periodo", async (req, res) => {
   const { codigo } = req.params;
@@ -109,8 +89,11 @@ app.get("/produto/:codigo/periodo", async (req, res) => {
         COALESCE(c.total_comprado, 0) AS total_comprado,
         COALESCE(v.total_vendido, 0) AS total_vendido,
 
-        COALESCE(c.total_comprado, 0)
-        - COALESCE(v.total_vendido, 0) AS estoque_periodo
+        (COALESCE(c.total_comprado, 0) - COALESCE(v.total_vendido, 0)) AS estoque_periodo,
+
+        ult.nome_fornecedor,
+        ult.preco_compra,
+        ult.data_compra
 
       FROM produtos p
 
@@ -127,6 +110,18 @@ app.get("/produto/:codigo/periodo", async (req, res) => {
         WHERE data_venda::date BETWEEN $2 AND $3
         GROUP BY produto_id
       ) v ON v.produto_id = p.id
+
+      LEFT JOIN LATERAL (
+        SELECT 
+          nome_fornecedor,
+          preco_compra,
+          TO_CHAR(data_compra::date, 'DD/MM/YYYY') AS data_compra
+        FROM compras c2
+        WHERE c2.produto_id = p.id
+          AND c2.data_compra::date BETWEEN $2 AND $3
+        ORDER BY c2.data_compra DESC
+        LIMIT 1
+      ) ult ON true
 
       WHERE p.codigo = $1
     `, [codigo, inicio, fim]);
