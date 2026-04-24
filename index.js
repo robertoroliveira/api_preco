@@ -23,8 +23,6 @@ app.get("/produto/:codigo", async (req, res) => {
         p.id,
         p.codigo,
         p.nome,
-
-        /* 🔥 NUNCA PODE SER NULL */
         p.preco AS preco_venda,
 
         COALESCE(c.total_comprado, 0) AS total_comprado,
@@ -33,7 +31,7 @@ app.get("/produto/:codigo", async (req, res) => {
         COALESCE(c.total_comprado, 0)
         - COALESCE(v.total_vendido, 0) AS estoque_atual,
 
-        /* 🧾 ÚLTIMA COMPRA GLOBAL */
+        /* 🧾 ÚLTIMA COMPRA REAL (NÃO DEPENDE DE FILTRO) */
         COALESCE(
           (
             SELECT TO_CHAR(c2.data_compra::date, 'DD/MM/YYYY')
@@ -94,7 +92,7 @@ app.get("/produto/:codigo", async (req, res) => {
 
 
 /* =========================
-   📅 PRODUTO POR PERÍODO (SEM FORNECEDOR / SEM LAYOUT GLOBAL)
+   📅 PRODUTO POR PERÍODO (APENAS MOVIMENTO)
 ========================= */
 app.get("/produto/:codigo/periodo", async (req, res) => {
   const { codigo } = req.params;
@@ -106,8 +104,6 @@ app.get("/produto/:codigo/periodo", async (req, res) => {
         p.id,
         p.codigo,
         p.nome,
-
-        /* 🔥 NUNCA ZERA PREÇO DE VENDA */
         p.preco AS preco_venda,
 
         COALESCE(c.total_comprado, 0) AS total_comprado,
@@ -143,10 +139,6 @@ app.get("/produto/:codigo/periodo", async (req, res) => {
   }
 });
 
-
-/* =========================
-   🚀 START SERVER
-========================= */
 app.listen(process.env.PORT || 3000, () => {
   console.log("API rodando");
 });
