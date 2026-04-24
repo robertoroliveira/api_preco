@@ -33,18 +33,11 @@ app.get("/produto/:codigo", async (req, res) => {
         COALESCE(SUM(c.qtd_compra), 0) AS total_comprado,
         COALESCE(SUM(v.quantidade), 0) AS total_vendido,
 
-        /* 🔥 ÚLTIMO PREÇO DE COMPRA */
-        COALESCE(
-          (
-            SELECT c2.preco_compra
-            FROM compras c2
-            WHERE c2.produto_id = p.id
-            ORDER BY c2.data_compra DESC
-            LIMIT 1
-          ),
-        0) AS preco_compra,
+        /* 🧾 ÚLTIMA COMPRA (PREÇO + FORNECEDOR) */
+        c_last.preco_compra,
+        c_last.nome_fornecedor,
 
-        /* 📅 ÚLTIMA COMPRA */
+        /* 📅 DATA ÚLTIMA COMPRA */
         COALESCE(
           TO_CHAR(MAX(c.data_compra::date), 'DD/MM/YYYY'),
           'SEM COMPRA'
@@ -56,11 +49,28 @@ app.get("/produto/:codigo", async (req, res) => {
 
       FROM produtos p
 
-      LEFT JOIN compras c ON c.produto_id = p.id
-      LEFT JOIN vendas v ON v.produto_id = p.id
+      LEFT JOIN compras c 
+        ON c.produto_id = p.id
+
+      LEFT JOIN vendas v 
+        ON v.produto_id = p.id
+
+      /* 🔥 ÚLTIMA COMPRA (LATERAL JOIN CORRETO) */
+      LEFT JOIN LATERAL (
+        SELECT 
+          c2.preco_compra,
+          c2.nome_fornecedor
+        FROM compras c2
+        WHERE c2.produto_id = p.id
+        ORDER BY c2.data_compra DESC
+        LIMIT 1
+      ) c_last ON true
 
       WHERE p.codigo = $1
-      GROUP BY p.id, p.codigo, p.nome, p.preco
+      GROUP BY 
+        p.id, p.codigo, p.nome, p.preco,
+        c_last.preco_compra,
+        c_last.nome_fornecedor
     `, [codigo]);
 
     if (result.rows.length === 0) {
