@@ -80,24 +80,29 @@ app.get("/produto/:codigo/periodo", async (req, res) => {
         p.codigo,
         p.nome,
 
-        COALESCE(SUM(c.qtd_compra), 0) AS total_comprado,
-        COALESCE(SUM(v.quantidade), 0) AS total_vendido,
+        COALESCE(c.total_comprado, 0) AS total_comprado,
+        COALESCE(v.total_vendido, 0) AS total_vendido,
 
-        COALESCE(SUM(c.qtd_compra), 0)
-        - COALESCE(SUM(v.quantidade), 0) AS estoque_periodo
+        COALESCE(c.total_comprado, 0)
+        - COALESCE(v.total_vendido, 0) AS estoque_periodo
 
       FROM produtos p
 
-      LEFT JOIN compras c 
-        ON c.produto_id = p.id
-        AND c.data_compra::date BETWEEN $2 AND $3
+      LEFT JOIN (
+        SELECT produto_id, SUM(qtd_compra) AS total_comprado
+        FROM compras
+        WHERE data_compra::date BETWEEN $2 AND $3
+        GROUP BY produto_id
+      ) c ON c.produto_id = p.id
 
-      LEFT JOIN vendas v 
-        ON v.produto_id = p.id
-        AND v.data_venda::date BETWEEN $2 AND $3
+      LEFT JOIN (
+        SELECT produto_id, SUM(quantidade) AS total_vendido
+        FROM vendas
+        WHERE data_venda::date BETWEEN $2 AND $3
+        GROUP BY produto_id
+      ) v ON v.produto_id = p.id
 
       WHERE p.codigo = $1
-      GROUP BY p.id, p.codigo, p.nome
     `, [codigo, inicio, fim]);
 
     if (result.rows.length === 0) {
