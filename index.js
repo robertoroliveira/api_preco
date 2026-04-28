@@ -195,3 +195,19 @@ app.get("/produto/auto/:codigo", async (req, res) => {
     res.status(500).json({ error: "Erro no servidor" });
   }
 });
+
+app.get("/produtos", async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT id, codigo, nome, preco, imagem
+      FROM produtos
+      ORDER BY nome
+    `);
+
+    res.json(result.rows);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao listar produtos" });
+  }
+});
