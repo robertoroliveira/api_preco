@@ -1,3 +1,25 @@
+const axios = require("axios");
+
+async function buscarProdutoExterno(codigo) {
+  try {
+    const url = `https://world.openfoodfacts.org/api/v0/product/${codigo}.json`;
+
+    const response = await axios.get(url);
+
+    if (response.data.status === 1) {
+      return {
+        nome: response.data.product.product_name || "Produto sem nome",
+        imagem: response.data.product.image_url || null
+      };
+    }
+
+    return null;
+
+  } catch (e) {
+    return null;
+  }
+}
+
 const express = require("express");
 const cors = require("cors");
 const { Pool } = require("pg");
@@ -136,4 +158,40 @@ app.get("/produto/:codigo/periodo", async (req, res) => {
 
 app.listen(process.env.PORT || 3000, () => {
   console.log("API rodando");
+});
+app.get("/produto/auto/:codigo", async (req, res) => {
+  const { codigo } = req.params;
+
+  try {
+    // verifica se já existe
+    const existe = await pool.query(
+      "SELECT * FROM produtos WHERE codigo = $1",
+      [codigo]
+    );
+
+    if (existe.rows.length > 0) {
+      return res.json(existe.rows[0]);
+    }
+
+    // busca na API externa
+    const externo = await buscarProdutoExterno(codigo);
+
+    if (!externo) {
+      return res.json({ error: "Produto não encontrado" });
+    }
+
+    // salva no banco
+    const insert = await pool.query(
+      `INSERT INTO produtos (codigo, nome, imagem)
+       VALUES ($1, $2, $3)
+       RETURNING *`,
+      [codigo, externo.nome, externo.imagem]
+    );
+
+    res.json(insert.rows[0]);
+
+  } catch (err) {
+    console.error("Erro auto:", err);
+    res.status(500).json({ error: "Erro no servidor" });
+  }
 });
